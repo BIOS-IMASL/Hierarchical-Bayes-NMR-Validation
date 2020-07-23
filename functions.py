@@ -102,7 +102,6 @@ def hierarchical_reg_one_protein(dataframe, samples=2000):
     std_teo = 4.65
     std_exp = 4.90
 
-    # XXX No alteramos el dataframe
     ca_exp = (dataframe.ca_exp - mean_exp) / std_exp
     ca_teo = (dataframe.ca_teo - mean_exp) / std_exp
 
@@ -110,26 +109,6 @@ def hierarchical_reg_one_protein(dataframe, samples=2000):
     index = categories.codes
     N = len(np.unique(index))
 
-    (
-        ca_exp_all_proteins,
-        ca_teo_all_proteins,
-        dataframe_all_proteins,
-        df_all_proteins,
-    ) = load_data()
-    categories_all_proteins = pd.Categorical(dataframe_all_proteins["res"])
-    index_all_proteins = categories_all_proteins.codes
-    N_all_proteins = len(np.unique(index_all_proteins))
-
-    aa_to_delete = list(
-        set(categories_all_proteins.categories) - set(categories.categories)
-    )
-
-    index_to_delete = []
-    for aa in aa_to_delete:
-        indice = np.argwhere(categories_all_proteins.categories == aa)[0][0]
-        index_to_delete.append(indice)
-
-    # XXX Modifiqué esto por que fallaba
     if os.path.isfile("all_trace_reparam.nc"):
         trace_all_proteins = az.from_netcdf("all_trace_reparam.nc")
     else:
@@ -183,15 +162,6 @@ def get_biomolecular_data(protein_name, bmrb_code):
     dataframe = dataframe[dataframe["ca_teo"] < 500]
     dataframe = dataframe[dataframe.res != "CYS"]
     dataframe.dropna(inplace=True)
-
-    (
-        pps,
-        index,
-        categories,
-        dataframe_protein,
-        trace_che,
-        model,
-    ) = hierarchical_reg_one_protein(dataframe, samples=2000)
 
     return dataframe
 
