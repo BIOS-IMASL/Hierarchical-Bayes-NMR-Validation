@@ -1,5 +1,6 @@
 from pymol import cmd, stored
 import numpy as np
+import os
 
 
 def create_pymol_session(protein_name, param_list):
@@ -19,5 +20,5 @@ def create_pymol_session(protein_name, param_list):
         cmd.color(color, "sele")
         cmd.delete("sele")
 
-    cmd.save("./pymol_sessions/" + protein_name + ".pse")
+    cmd.save(os.path.join("pymol_sessions", "protein_name" + ".pse"))
     cmd.delete("all")
