@@ -1,19 +1,10 @@
 from pymol import cmd, stored
-
-"""
-import __main__
-
-__main__.pymol_argv = ["pymol", "-qc"]  # Pymol: quiet and no GUI
-import sys, pymol
-
-stdout = sys.stdout
-pymol.finish_launching()
-"""
 import numpy as np
 
 
 def create_pymol_session(protein_name, param_list):
 
+    """Create a pymol session for the protein structure. Colored as in difference_plot."""
     cmd.load("./pdbs/" + protein_name + ".pdb")
     cmd.color("white", "all")
 

@@ -5,8 +5,6 @@ import sys
 import re
 import glob
 
-np.seterr(all="raise")
-
 
 def split_pdb(pdb_filename):
     pdb_list = []
@@ -687,7 +685,7 @@ def clean():
 
 
 def write_teo_cs(pdb_filename, bmrb_code):
-    path = "cheshift\\CS_DB"
+    path = os.path.join("cheshift", "CS_DB")
     nuclei = 2
     Db = load(path)
 

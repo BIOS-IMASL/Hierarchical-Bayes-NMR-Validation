@@ -2,16 +2,21 @@ import arviz as az
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
-from functions import get_biomolecular_data
+import os
+from functions import (
+    get_biomolecular_data,
+    hierarchical_reg_target,
+    hierarchical_reg_reference,
+)
 
-def plot_reference_curves(residue_list, text_size=12, figsize=None, save=False):
 
+def plot_reference_densities(residue_list, text_size=12, figsize=None, save=False):
+
+    """Plot the reference densities of CS differences for high quality protein structures."""
     l = len(residue_list) % 3
     if l == 0:
         plot_lenght = len(residue_list) // 3
-        # uneven = False
     else:
-        # uneven = True
         plot_lenght = len(residue_list) // 3 + 1
 
     if not figsize:
@@ -28,12 +33,17 @@ def plot_reference_curves(residue_list, text_size=12, figsize=None, save=False):
 
     ax = ax.ravel()
 
-    dataframe_all = pd.read_csv("dataframe_all_proteins.csv")
+    if os.path.isfile("dataframe_all_proteins.csv"):
+        dataframe_all = pd.read_csv("dataframe_all_proteins.csv")
+    else:
+        dataframe_all, trace_all = hierarchical_reg_reference()
+        trace_all = az.from_pymc3(trace_all_proteins)
+        az.to_netcdf(trace_all_proteins, "all_trace_reparam.nc")
+        dataframe.to_csv("dataframe_all_proteins.csv")
+
     categories_all = pd.Categorical(dataframe_all["res"])
 
     index_all = categories_all.codes
-
-    model_cheshift_hierarchical = return_models()
 
     perct_dict = {}
 
@@ -83,25 +93,22 @@ def plot_cs_differences(
     protein_code,
     save=False,
     bmrb_code=None,
-    residue_list=None,
+    residues=None,
     pymol_session=False,
     ax=None,
     marker="o",
     perct_dict=None,
 ):
 
-    _, _, _, dataframe_full, _, _ = get_biomolecular_data(
-        protein_code, bmrb_code=bmrb_code
-    )
+    """Plot the reference densities of CS differences for target protein structures."""
+    dataframe_full = get_biomolecular_data(protein_code, bmrb_code=bmrb_code)
+    dataframe_full, trace, y_pred = hierarchical_reg_target(dataframe_full)
 
-    if residue_list is None:
+    if residues is None:
         residues = np.unique(dataframe_full.res.values)
 
-    else:
-        residues = residue_list
-
     if ax is None:
-        _, ax, perct_dict = plot_reference_curves(residues)
+        _, ax, perct_dict = plot_reference_densities(residues)
 
     param_list = []
 
@@ -161,7 +168,7 @@ def plot_cs_differences(
             textcoords="offset points",
             bbox=dict(boxstyle="round", fc="k", alpha=0.1),
         )
-    ### XXX cambiar print a una leyenda o algo por el estilo
+
     print(
         np.round(
             np.array([red_residues, yellow_residues, green_residues])
@@ -169,6 +176,7 @@ def plot_cs_differences(
             * 100
         )
     )
+
     if save:
         plt.savefig(f".\\images\\{protein_code}_differences.png", dpi=300)
 
@@ -205,4 +213,4 @@ def plot_cs_differences(
     # if residue_list is None:
     #    dataframe_full["colors"] = color_list
 
-    return ax, dataframe_full, perct_dict
+    return ax, dataframe_full, perct_dict, trace, y_pred
