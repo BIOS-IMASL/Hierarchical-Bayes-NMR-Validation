@@ -184,9 +184,8 @@ def plot_cs_differences(
         plt.savefig(f".\\images\\{protein_code}_differences.png", dpi=300)
 
     if pymol_session:
-        import color
 
-        color.create_pymol_session(
+        create_pymol_session(
             protein_code,
             param_list,
         )
