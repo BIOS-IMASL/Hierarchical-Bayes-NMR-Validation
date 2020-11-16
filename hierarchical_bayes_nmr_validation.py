@@ -370,7 +370,7 @@ def create_pymol_session(protein_name, param_list):
     from pymol import cmd, stored
 
     """Create a pymol session for the protein structure. Colored as in difference_plot."""
-    cmd.load("./pdbs/" + protein_name + ".pdb")
+    cmd.load( os.path.join("data", protein_name + ".pdb"))
     cmd.color("white", "all")
 
     for index, color, res in param_list:
