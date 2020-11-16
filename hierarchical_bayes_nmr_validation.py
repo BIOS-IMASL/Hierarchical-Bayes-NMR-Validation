@@ -31,13 +31,13 @@ def plot_reference_densities(residue_list, text_size=12, figsize=None, save=Fals
 
     ax = ax.ravel()
 
-    if os.path.isfile("dataframe_all_proteins.csv"):
-        dataframe_all = pd.read_csv("dataframe_all_proteins.csv")
+    if os.path.isfile(os.path.join("data", "dataframe_all_proteins.csv")):
+        dataframe_all = pd.read_csv(os.path.join("data", "dataframe_all_proteins.csv"))
     else:
         dataframe_all, trace_all = hierarchical_reg_reference()
         trace_all = az.from_pymc3(trace_all_proteins)
-        az.to_netcdf(trace_all_proteins, "all_trace_reparam.nc")
-        dataframe.to_csv("dataframe_all_proteins.csv")
+        az.to_netcdf(trace_all_proteins, os.path.join("data", "all_trace_reparam.nc"))
+        dataframe.to_csv(os.path.join("data", "dataframe_all_proteins.csv"))
 
     categories_all = pd.Categorical(dataframe_all["res"])
 
@@ -222,8 +222,7 @@ def load_data(protein=None):
 
     """Load CS data for a protein in the reference data set. Run with protein=None for loading
     the entire data set."""
-    dataframe = pd.read_csv(
-        "data/results_cheshift_theo_exp.csv",
+    dataframe = pd.read_csv(os.path.join("data", "results_cheshift_theo_exp.csv"),
         names=["protein", "res", "ca_teo", "ca_exp", "cb_teo", "cb_exp"],
     )
 
@@ -244,8 +243,8 @@ def get_biomolecular_data(protein_name, bmrb_code):
 
     """Combine CS data from a PDB file and a BMRB file into a single dataframe"""
     write_teo_cs(protein_name, bmrb_code)
-    dataframe = pd.read_csv(
-        f"{protein_name.lower()}_cs_theo_exp.csv",
+    dataframe = pd.read_csv(os.path.join("data",
+        f"{protein_name.lower()}_cs_theo_exp.csv"),
         names=["pdb_code", "res", "bmrb_code", "ca_exp", "ca_teo"],
     )
 
@@ -297,7 +296,7 @@ def hierarchical_reg_reference(samples=2000):
         + mean_exp
     )
 
-    az.to_netcdf(trace, "all_trace_reparam.nc")
+    az.to_netcdf(trace, os.path.join("data", "all_trace_reparam.nc"))
     dataframe["y_pred"] = y_pred.mean(0)
 
     return dataframe, trace
@@ -325,13 +324,13 @@ def hierarchical_reg_target(dataframe, samples=2000):
     index = categories.codes
     N = len(np.unique(index))
 
-    if os.path.isfile("all_trace_reparam.nc"):
-        trace_all_proteins = az.from_netcdf("all_trace_reparam.nc")
+    if os.path.isfile(os.path.join("data", "all_trace_reparam.nc")):
+        trace_all_proteins = az.from_netcdf(os.path.join("data", "all_trace_reparam.nc"))
     else:
         dataframe_all_proteins, trace_all_proteins = hierarchical_reg_reference()
         trace_all_proteins = az.from_pymc3(trace_all_proteins)
-        az.to_netcdf(trace_all_proteins, "all_trace_reparam.nc")
-        dataframe_all_proteins.to_csv("dataframe_all_proteins.csv")
+        az.to_netcdf(trace_all_proteins, os.path.join("data", "all_trace_reparam.nc"))
+        dataframe_all_proteins.to_csv(os.path.join("data", "dataframe_all_proteins.csv"))
 
     learnt_alpha_sd_mean = trace_all_proteins.posterior.alpha_sd.mean(
         dim=["chain", "draw"]
