@@ -31,13 +31,13 @@ def plot_reference_densities(residue_list, text_size=12, figsize=None, save=Fals
 
     ax = ax.ravel()
 
-    if os.path.isfile(os.path.join("data", "dataframe_all_proteins.csv")):
-        dataframe_all = pd.read_csv(os.path.join("data", "dataframe_all_proteins.csv"))
+    if os.path.isfile(os.path.join("data", "trace_reference_structures.csv")):
+        dataframe_all = pd.read_csv(os.path.join("data", "dataframe_reference_structures.csv"))
     else:
         dataframe_all, trace_all = hierarchical_reg_reference()
         trace_all = az.from_pymc3(trace_all_proteins)
-        az.to_netcdf(trace_all_proteins, os.path.join("data", "all_trace_reparam.nc"))
-        dataframe.to_csv(os.path.join("data", "dataframe_all_proteins.csv"))
+        az.to_netcdf(trace_all_proteins, os.path.join("data", "trace_reference_structures.nc"))
+        dataframe.to_csv(os.path.join("data", "trace_reference_structures.csv"))
 
     categories_all = pd.Categorical(dataframe_all["res"])
 
@@ -296,7 +296,7 @@ def hierarchical_reg_reference(samples=2000):
         + mean_exp
     )
 
-    az.to_netcdf(trace, os.path.join("data", "all_trace_reparam.nc"))
+    az.to_netcdf(trace, os.path.join("data", "trace_reference_structures.nc"))
     dataframe["y_pred"] = y_pred.mean(0)
 
     return dataframe, trace
@@ -324,13 +324,13 @@ def hierarchical_reg_target(dataframe, samples=2000):
     index = categories.codes
     N = len(np.unique(index))
 
-    if os.path.isfile(os.path.join("data", "all_trace_reparam.nc")):
-        trace_all_proteins = az.from_netcdf(os.path.join("data", "all_trace_reparam.nc"))
+    if os.path.isfile(os.path.join("data", "trace_reference_structures.nc")):
+        trace_all_proteins = az.from_netcdf(os.path.join("data", "trace_reference_structures.nc"))
     else:
         dataframe_all_proteins, trace_all_proteins = hierarchical_reg_reference()
         trace_all_proteins = az.from_pymc3(trace_all_proteins)
-        az.to_netcdf(trace_all_proteins, os.path.join("data", "all_trace_reparam.nc"))
-        dataframe_all_proteins.to_csv(os.path.join("data", "dataframe_all_proteins.csv"))
+        az.to_netcdf(trace_all_proteins, os.path.join("data", "trace_reference_structures.nc"))
+        dataframe_all_proteins.to_csv(os.path.join("data", "trace_reference_structures.csv"))
 
     learnt_alpha_sd_mean = trace_all_proteins.posterior.alpha_sd.mean(
         dim=["chain", "draw"]
@@ -370,7 +370,7 @@ def create_pymol_session(protein_name, param_list):
     from pymol import cmd, stored
 
     """Create a pymol session for the protein structure. Colored as in difference_plot."""
-    cmd.load( os.path.join("data", protein_name + ".pdb"))
+    cmd.load( os.path.join("data", f"{protein_name}" + ".pdb"))
     cmd.color("white", "all")
 
     for index, color, res in param_list:
@@ -384,5 +384,5 @@ def create_pymol_session(protein_name, param_list):
         cmd.color(color, "sele")
         cmd.delete("sele")
 
-    cmd.save(os.path.join("pymol_sessions", "protein_name" + ".pse"))
+    cmd.save(os.path.join("pymol_sessions", f"{protein_name}" + ".pse"))
     cmd.delete("all")
