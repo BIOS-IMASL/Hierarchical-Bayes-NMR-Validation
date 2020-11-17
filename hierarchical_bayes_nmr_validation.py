@@ -330,7 +330,7 @@ def hierarchical_reg_target(dataframe, samples=2000):
         dataframe_all_proteins, trace_all_proteins = hierarchical_reg_reference()
         trace_all_proteins = az.from_pymc3(trace_all_proteins)
         az.to_netcdf(trace_all_proteins, os.path.join("data", "trace_reference_structures.nc"))
-        dataframe_all_proteins.to_csv(os.path.join("data", "trace_reference_structures.csv"))
+        dataframe_all_proteins.to_csv(os.path.join("data", "dataframe_reference_structures.csv"))
 
     learnt_alpha_sd_mean = trace_all_proteins.posterior.alpha_sd.mean(
         dim=["chain", "draw"]
