@@ -31,13 +31,13 @@ def plot_reference_densities(residue_list, text_size=12, figsize=None, save=Fals
 
     ax = ax.ravel()
 
-    if os.path.isfile(os.path.join("data", "trace_reference_structures.csv")):
+    if os.path.isfile(os.path.join("data", "dataframe_reference_structures.csv")):
         dataframe_all = pd.read_csv(os.path.join("data", "dataframe_reference_structures.csv"))
     else:
         dataframe_all, trace_all = hierarchical_reg_reference()
         trace_all = az.from_pymc3(trace_all_proteins)
         az.to_netcdf(trace_all_proteins, os.path.join("data", "trace_reference_structures.nc"))
-        dataframe.to_csv(os.path.join("data", "trace_reference_structures.csv"))
+        dataframe.to_csv(os.path.join("data", "dataframe_reference_structures.csv"))
 
     categories_all = pd.Categorical(dataframe_all["res"])
 
