@@ -59,7 +59,6 @@ def plot_reference_densities(residue_list, text_size=12, figsize=None, save=Fals
         perct = np.percentile(difference_dist, [0, 5, 20, 80, 95, 100])
         perct_dict[residue] = perct
 
-        perct_colors = ["C8", "C3", "C8", "C2", "C8", "C3"]
         idx0 = 0
         for index, p in enumerate(perct):
             ax[i].tick_params(labelsize=16)
@@ -82,7 +81,7 @@ def plot_reference_densities(residue_list, text_size=12, figsize=None, save=Fals
         for idy in range(len(ax))
     ]
     [ax_.set_yticks([]) for ax_ in ax]
-    [ax_.set_xlim(-5, 5) for ax_ in ax]
+    [ax_.set_xlim(-6, 6) for ax_ in ax]
 
     for i in range(1, len(ax) - len(residue_list) + 1):
         ax[-i].axis("off")
@@ -94,6 +93,7 @@ def plot_reference_densities(residue_list, text_size=12, figsize=None, save=Fals
 
 def plot_cs_differences(
     protein_code,
+    target_accept=0.9,
     save=False,
     bmrb_code=None,
     residues=None,
@@ -101,11 +101,16 @@ def plot_cs_differences(
     ax=None,
     marker="o",
     perct_dict=None,
+    plot_kwargs=None,
 ):
 
     """Plot the reference densities of CS differences for target protein structures."""
+    if not plot_kwargs:
+        plot_kwargs = {}
+    plot_kwargs.setdefault("s", 10)
+
     dataframe_full = get_biomolecular_data(protein_code, bmrb_code=bmrb_code)
-    dataframe_full, trace, y_pred = hierarchical_reg_target(dataframe_full)
+    dataframe_full, trace, y_pred = hierarchical_reg_target(dataframe_full, target_accept=target_accept)
 
     if residues is None:
         residues = np.unique(dataframe_full.res.values)
@@ -140,10 +145,10 @@ def plot_cs_differences(
             perct = perct_dict[res]
 
             if diff < perct[1] or diff > perct[-2]:
-                color = ["C3", "red"]
+                color = ["C1", "yellow"]
                 red_residues += 1
             elif diff < perct[2] or diff > perct[-3]:
-                color = ["C8", "yellow"]
+                color = ["C6", "orange"]
                 yellow_residues += 1
             else:
                 color = ["C2", "green"]
@@ -156,8 +161,8 @@ def plot_cs_differences(
                     marker=marker,
                     c=color[0],
                     linewidth=5,
-                    s=10,
                     alpha=1,
+                    **plot_kwargs,
                 )
 
                 param_list.append((residue_indexes[z], color[1], res))
@@ -181,7 +186,7 @@ def plot_cs_differences(
     )
 
     if save:
-        plt.savefig(f".\\images\\{protein_code}_differences.png", dpi=300)
+        plt.savefig(os.path.join("images", f"{protein_code}_differences.png"), dpi=600)
 
     if pymol_session:
 
@@ -245,7 +250,7 @@ def get_biomolecular_data(protein_name, bmrb_code):
     write_teo_cs(protein_name, bmrb_code)
     dataframe = pd.read_csv(os.path.join("data",
         f"{protein_name.lower()}_cs_theo_exp.csv"),
-        names=["pdb_code", "res", "bmrb_code", "ca_exp", "ca_teo"],
+        names=["protein", "res", "bmrb_code", "ca_exp", "ca_teo"],
     )
 
     dataframe = dataframe[dataframe["res"] != "UNK"]
@@ -257,10 +262,15 @@ def get_biomolecular_data(protein_name, bmrb_code):
     return dataframe
 
 
-def hierarchical_reg_reference(samples=2000):
+def hierarchical_reg_reference(samples=2000, target_df=None):
 
     """Runs a hierarchical model over the reference data set."""
     _, _, dataframe = load_data()
+
+    if target_df.any().any():
+        del target_df['bmrb_code']
+        dataframe = dataframe[dataframe.protein != '1UBQ']
+        dataframe = pd.concat([dataframe, target_df], ignore_index=True)        
 
     mean_teo = dataframe["ca_teo"].mean()
     mean_exp = dataframe["ca_exp"].mean()
@@ -296,13 +306,14 @@ def hierarchical_reg_reference(samples=2000):
         + mean_exp
     )
 
-    az.to_netcdf(trace, os.path.join("data", "trace_reference_structures.nc"))
+    if not target_df.any().any():
+        az.to_netcdf(trace, os.path.join("data", "trace_reference_structures.nc"))
     dataframe["y_pred"] = y_pred.mean(0)
 
-    return dataframe, trace
+    return dataframe, trace, y_pred
 
 
-def hierarchical_reg_target(dataframe, samples=2000):
+def hierarchical_reg_target(dataframe, target_accept=0.9, samples=2000):
     """
     Runs a hierarchical model over the target structure CS data set.
 
@@ -326,7 +337,10 @@ def hierarchical_reg_target(dataframe, samples=2000):
 
     if os.path.isfile(os.path.join("data", "trace_reference_structures.nc")):
         trace_all_proteins = az.from_netcdf(os.path.join("data", "trace_reference_structures.nc"))
+        print(f"Loaded reference trace from {os.path.join('data', 'trace_reference_structures.nc')}")
     else:
+        print(f"could not find reference trace from {os.path.join('data', 'trace_reference_structures.nc')}")
+        print("Running model for reference structures")
         dataframe_all_proteins, trace_all_proteins = hierarchical_reg_reference()
         trace_all_proteins = az.from_pymc3(trace_all_proteins)
         az.to_netcdf(trace_all_proteins, os.path.join("data", "trace_reference_structures.nc"))
@@ -351,7 +365,7 @@ def hierarchical_reg_target(dataframe, samples=2000):
         μ = pm.Deterministic("μ", α[index] + β[index] * ca_teo)
         # likelihood
         cheshift = pm.Normal("cheshift", mu=μ, sigma=σ, observed=ca_exp)
-        trace = pm.sample(samples, tune=2000, random_seed=18759)
+        trace = pm.sample(samples, tune=2000, random_seed=18759, target_accept=target_accept)
 
     y_pred = (
         pm.sample_posterior_predictive(
@@ -373,13 +387,11 @@ def create_pymol_session(protein_name, param_list):
     cmd.load( os.path.join("data", f"{protein_name}" + ".pdb"))
     cmd.color("white", "all")
 
-    for index, color, res in param_list:
-        if color == "red":
-            color = "0xd62728"
-        elif color == "yellow":
-            color = "0xbcbd22"
-        else:
-            color = "0x2ca02c"
+    cmd.set_color('yellow', [0.9803921568627451, 0.48627450980392156, 0.09019607843137255] )
+    cmd.set_color('orange', [0.9019607843137255, 0.8823529411764706, 0.20784313725490197])
+    cmd.set_color('green', [0.19607843137254902, 0.5490196078431373, 0.023529411764705882])
+
+    for index, color, res in param_list:            
         cmd.select("sele", "resn {} and resi {}".format(res, index))
         cmd.color(color, "sele")
         cmd.delete("sele")
