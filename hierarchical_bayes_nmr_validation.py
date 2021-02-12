@@ -7,6 +7,7 @@ import os
 
 from cheshift._cheshift import write_teo_cs
 
+np.random.seed(18759)
 
 def plot_reference_densities(residue_list, text_size=12, figsize=None, save=False):
 
@@ -105,12 +106,22 @@ def plot_cs_differences(
 ):
 
     """Plot the reference densities of CS differences for target protein structures."""
+
+    _, _, reference_df = load_data()
+    mean_exp = reference_df["ca_exp"].mean()
+    std_exp = reference_df["ca_exp"].std()
+
     if not plot_kwargs:
         plot_kwargs = {}
     plot_kwargs.setdefault("s", 10)
 
     dataframe_full = get_biomolecular_data(protein_code, bmrb_code=bmrb_code)
-    dataframe_full, trace, y_pred = hierarchical_reg_target(dataframe_full, target_accept=target_accept)
+    dataframe_reference, idata = hierarchical_reg_reference(target_df=dataframe_full)
+    idata_target = idata.sel(
+    cheshift_dim_0=slice(dataframe_reference.shape[0]-dataframe_full.shape[0], 
+        dataframe_reference.shape[0]))
+
+    idata_target.posterior_predictive = idata_target.posterior_predictive * std_exp + mean_exp
 
     if residues is None:
         residues = np.unique(dataframe_full.res.values)
@@ -120,7 +131,7 @@ def plot_cs_differences(
 
     param_list = []
 
-    differences = dataframe_full.y_pred - dataframe_full.ca_exp
+    differences = idata_target.posterior_predictive['cheshift'].values.mean(axis=(0, 1)) - dataframe_full.ca_exp
 
     len_residues = len(differences)
     red_residues = 0
@@ -221,7 +232,7 @@ def plot_cs_differences(
     # if residue_list is None:
     #    dataframe_full["colors"] = color_list
 
-    return ax, dataframe_full, perct_dict, trace, y_pred
+    return ax, dataframe_full, perct_dict, idata_target
 
 def load_data(protein=None):
 
@@ -267,10 +278,14 @@ def hierarchical_reg_reference(samples=2000, target_df=None):
     """Runs a hierarchical model over the reference data set."""
     _, _, dataframe = load_data()
 
-    if target_df.any().any():
+    if target_df is None:
+        target_df = pd.DataFrame({})
+
+    else:
         del target_df['bmrb_code']
         dataframe = dataframe[dataframe.protein != '1UBQ']
-        dataframe = pd.concat([dataframe, target_df], ignore_index=True)        
+        dataframe = pd.concat([dataframe, target_df], ignore_index=True)
+
 
     mean_teo = dataframe["ca_teo"].mean()
     mean_exp = dataframe["ca_exp"].mean()
@@ -288,29 +303,23 @@ def hierarchical_reg_reference(samples=2000, target_df=None):
         # hyper-priors
         alpha_sd = pm.HalfNormal("alpha_sd", 1.0)
         beta_sd = pm.HalfNormal("beta_sd", 1.0)
+        sigma_sd = pm.HalfNormal("sigma_sd", 1.0)
         # priors
         α = pm.Normal("α", 0, alpha_sd, shape=N)
         β = pm.HalfNormal("β", beta_sd, shape=N)
-        σ = pm.HalfNormal("σ", 1.0)
+        σ = pm.HalfNormal("σ", sigma_sd, shape=N)
         # linear model
         μ = pm.Deterministic("μ", α[index] + β[index] * ca_teo)
         # likelihood
-        cheshift = pm.Normal("cheshift", mu=μ, sigma=σ, observed=ca_exp)
-        trace = pm.sample(samples, tune=2000, random_seed=18759)
+        cheshift = pm.Normal("cheshift", mu=μ, sigma=σ[index], observed=ca_exp)
+        idata = pm.sample(samples, tune=2000, random_seed=18759, target_accept=0.9, return_inferencedata=True)
+        pps = pm.sample_posterior_predictive(idata, samples=samples * idata.posterior.dims["chain"], random_seed=18759)
+        idata.add_groups({"posterior_predictive":{"cheshift":pps["cheshift"][None,:,:]}})
 
-    y_pred = (
-        pm.sample_posterior_predictive(
-            trace, model=model, samples=samples * trace.nchains
-        )["cheshift"]
-        * std_exp
-        + mean_exp
-    )
+    if target_df is None:
+        az.to_netcdf(idata, os.path.join("data", "trace_reference_structures.nc"))
 
-    if not target_df.any().any():
-        az.to_netcdf(trace, os.path.join("data", "trace_reference_structures.nc"))
-    dataframe["y_pred"] = y_pred.mean(0)
-
-    return dataframe, trace, y_pred
+    return dataframe, idata
 
 
 def hierarchical_reg_target(dataframe, target_accept=0.9, samples=2000):
@@ -342,9 +351,9 @@ def hierarchical_reg_target(dataframe, target_accept=0.9, samples=2000):
         print(f"could not find reference trace from {os.path.join('data', 'trace_reference_structures.nc')}")
         print("Running model for reference structures")
         dataframe_all_proteins, trace_all_proteins = hierarchical_reg_reference()
-        trace_all_proteins = az.from_pymc3(trace_all_proteins)
-        az.to_netcdf(trace_all_proteins, os.path.join("data", "trace_reference_structures.nc"))
-        dataframe_all_proteins.to_csv(os.path.join("data", "dataframe_reference_structures.csv"))
+        #trace_all_proteins = az.from_pymc3(trace_all_proteins)
+        #az.to_netcdf(trace_all_proteins, os.path.join("data", "trace_reference_structures.nc"))
+        #dataframe_all_proteins.to_csv(os.path.join("data", "dataframe_reference_structures.csv"))
 
     learnt_alpha_sd_mean = trace_all_proteins.posterior.alpha_sd.mean(
         dim=["chain", "draw"]
@@ -352,31 +361,29 @@ def hierarchical_reg_target(dataframe, target_accept=0.9, samples=2000):
     learnt_beta_sd_mean = trace_all_proteins.posterior.beta_sd.mean(
         dim=["chain", "draw"]
     ).values
+    learnt_sigma_sd_mean = trace_all_proteins.posterior.sigma_sd.mean(
+        dim=["chain", "draw"]
+    ).values
+
 
     with pm.Model() as model:
         # hyper-priors
         alpha_sd = pm.HalfNormal("alpha_sd", learnt_alpha_sd_mean)
         beta_sd = pm.HalfNormal("beta_sd", learnt_beta_sd_mean)
+        sigma_sd = pm.HalfNormal("sigma_sd", learnt_beta_sd_mean)
         # priors
         α = pm.Normal("α", 0, alpha_sd, shape=N)
         β = pm.HalfNormal("β", beta_sd, shape=N)
-        σ = pm.HalfNormal("σ", 1.0)
+        σ = pm.HalfNormal("σ", sigma_sd, shape=N)
         # linear model
         μ = pm.Deterministic("μ", α[index] + β[index] * ca_teo)
         # likelihood
-        cheshift = pm.Normal("cheshift", mu=μ, sigma=σ, observed=ca_exp)
-        trace = pm.sample(samples, tune=2000, random_seed=18759, target_accept=target_accept)
+        cheshift = pm.Normal("cheshift", mu=μ, sigma=σ[index], observed=ca_exp)
+        idata = pm.sample(samples, tune=2000, random_seed=18759, target_accept=0.9, return_inferencedata=True)
+        pps = pm.sample_posterior_predictive(idata, samples=samples * idata.posterior.dims["chain"], random_seed=18759)
+        idata.add_groups({"posterior_predictive":{"cheshift":pps["cheshift"][None,:,:]}})
 
-    y_pred = (
-        pm.sample_posterior_predictive(
-            trace, model=model, samples=samples * trace.nchains
-        )["cheshift"]
-        * std_exp
-        + mean_exp
-    )
-
-    dataframe["y_pred"] = y_pred.mean(0)
-    return dataframe, trace, y_pred
+    return dataframe, idata
 
 
 

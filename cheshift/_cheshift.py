@@ -37,83 +37,60 @@ def split_pdb(pdb_filename):
     return conformations_num
 
 
-def bmrb2cheshift(cs_exp, cs_exp_name):
-    """Parse the experimental chemical shifts file. Stores the data in an easy
-    format for further processing"""
-    for line in open(os.path.join("data", cs_exp)).readlines():
-        if (
-            "C 13 DSS" in line
-            or "C 13  DSS" in line
-            or "DSS C 13" in line
-            or "DSS         C" in line
-            or "C .  DSS" in line
-        ):
+def bmrb2cheshift(bmrb):
+    """Parse the Star-bmrb format into a 4 column file"""
+    reference = None
+    for line in open(os.path.join("data", bmrb)).readlines():
+        if 'DSS' in line:
             reference = 1.7
-        elif (
-            "C 13 TSP" in line
-            or "C 13  TSP" in line
-            or "TSP C 13" in line
-            or "TSP         C" in line
-            or "C .  TSP" in line
-        ):
+        elif 'TSP' in line:
             reference = 1.82
-        else:
+        elif 'TMS' in line:
             reference = 0.00
+        if reference is not None:
+            break
+    if reference is None:
+        reference = 0.0
     try:
-        cs_exp_ca = []
-        cs_exp_cb = []
-        a = re.compile("[0-9]{1,5}\s{1,4}[A-Z]{3}\sCA\s{0,3}C.{0,5}[0-9]*\.[0-9]{0,2}")
-        b = re.compile("[0-9]{1,5}\s{1,4}[A-Z]{3}\sCB\s{0,3}C.{0,5}[0-9]*\.[0-9]{0,2}")
-        for line in open(os.path.join("data","%s" % cs_exp)).readlines():
+        bmrb_ca = []
+        bmrb_cb = []
+        a = re.compile('[0-9]{1,5}\s{1,5}[A-Z]{3}\s{1,4}CA\s{0,6}C.{0,10}[0-9]*\.[0-9]{0,2}')
+        b = re.compile('[0-9]{1,5}\s{1,5}[A-Z]{3}\s{1,4}CB\s{0,6}C.{0,10}[0-9]*\.[0-9]{0,2}')
+        for line in open(os.path.join("data","%s" % bmrb)).readlines():
             if a.search(line):
                 data = a.search(line).group().split()
-                cs_exp_ca.append(data)
+                bmrb_ca.append(data)
             if b.search(line):
                 data = b.search(line).group().split()
-                cs_exp_cb.append(data)
-        len_a = len(cs_exp_ca)
-        len_b = len(cs_exp_cb)
+                bmrb_cb.append(data)
+        len_a = len(bmrb_ca)
+        len_b = len(bmrb_cb)
         if len_a > len_b:
             dif = len_a - len_b
-            for i in range(dif):
-                cs_exp_cb.append(["99999"])
+            for i in range(0, dif):
+                bmrb_cb.append(['99999'])
         elif len_a < len_b:
             dif = len_b - len_a
-            for i in range(dif):
-                cs_exp_ca.append(["99999"])
+            for i in range(0, dif):
+                bmrb_ca.append(['99999'])
         count_ca = 0
         count_cb = 0
         ocs_list = []
         while True:
             try:
-                resn_ca = int(cs_exp_ca[count_ca][0])
-                resn_cb = int(cs_exp_cb[count_cb][0])
+                resn_ca = int(bmrb_ca[count_ca][0])
+                resn_cb = int(bmrb_cb[count_cb][0])
                 if resn_ca == resn_cb:
-                    line = "%4s %3s  %6.2f  %6.2f\n" % (
-                        cs_exp_ca[count_ca][0],
-                        cs_exp_ca[count_ca][1],
-                        float(cs_exp_ca[count_ca][-1]),
-                        float(cs_exp_cb[count_cb][-1]),
-                    )
+                    line = '%4s %3s  %6.2f  %6.2f\n' % (bmrb_ca[count_ca][0], bmrb_ca[count_ca][1], float(bmrb_ca[count_ca][-1]), float(bmrb_cb[count_cb][-1]))
                     ocs_list.append(line)
                     count_ca += 1
                     count_cb += 1
                 if resn_ca > resn_cb:
-                    line = "%4s %3s  %6.2f  %6.2f\n" % (
-                        cs_exp_cb[count_cb][0],
-                        cs_exp_cb[count_cb][1],
-                        999.00,
-                        float(cs_exp_cb[count_cb][-1]),
-                    )
+                    line = '%4s %3s  %6.2f  %6.2f\n' % (bmrb_cb[count_cb][0], bmrb_cb[count_cb][1], 999.00, float(bmrb_cb[count_cb][-1]))
                     ocs_list.append(line)
                     count_cb += 1
                 if resn_ca < resn_cb:
-                    line = "%4s %3s  %6.2f  %6.2f\n" % (
-                        cs_exp_ca[count_ca][0],
-                        cs_exp_ca[count_ca][1],
-                        float(cs_exp_ca[count_ca][-1]),
-                        999.00,
-                    )
+                    line = '%4s %3s  %6.2f  %6.2f\n' % (bmrb_ca[count_ca][0], bmrb_ca[count_ca][1], float(bmrb_ca[count_ca][-1]), 999.00)
                     ocs_list.append(line)
                     count_ca += 1
             except:
@@ -122,10 +99,10 @@ def bmrb2cheshift(cs_exp, cs_exp_name):
         count0 = 0
         count1 = 0
         safe = 0
-        fd = open(os.path.join("data", f"{cs_exp_name}.ocs"), "w")
+        fd = open(os.path.join("data", f"{bmrb}.ocs"), "w")
         while count0 < len(ocs_list):
             safe += 1
-            if safe > len(cs_exp_ca) * 5:
+            if safe > len(bmrb_ca)*5:
                 break
             res_new = int(ocs_list[count0].split()[0])
             if res_old + count1 == res_new:
@@ -133,12 +110,12 @@ def bmrb2cheshift(cs_exp, cs_exp_name):
                 count0 += 1
                 count1 += 1
             else:
-                fd.write("%4s UNK  999.00  999.00\n" % (res_old + count1))
+                fd.write('%4s UNK  999.00  999.00\n' % (res_old + count1))
                 count1 += 1
         fd.close()
     except:
-        fd = open(os.path.join("data", f"{cs_exp_name}.ocs"), "w")
-        cs_file = open(os.path.join("data", f"{cs_exp}")).readlines()
+        fd = open(os.path.join("data", f"{bmrb}.ocs"), "w")
+        cs_file = open(os.path.join("data", f"{bmrb}")).readlines()
         reference = cs_file[0]
         for line in cs_file[1:]:
             fd.write(line)
@@ -176,9 +153,8 @@ def check_seq(pdb_filename, cs_exp_name):
         # read the ocs file and extract the sequence using three letter code and save it to a list
         ocslist = []  # contains the sequence from the ocs file
         ocslist_full = []  # contains the whole ocs file
-        ocslist_full_new = []  # contains the corrected ocs file i.e. including UNK
-        lala = open(os.path.join("data", f"{cs_exp_name}.ocs"))
-        for line in lala.readlines():
+        ocslist_full_new = []
+        for line in open(os.path.join("data", f"{cs_exp_name}.ocs")).readlines():
             ocslist_full.append(line)
             ocslist.append(line.split()[1])
         indelfirst, indellast = align(ocslist, seqlist)
@@ -198,7 +174,7 @@ def check_seq(pdb_filename, cs_exp_name):
             for i in range(
                 newfirst, firstocs
             ):  # works only if indelfirst is greater than 0
-                line = "%4s %3s  %6.2f  %6.2f\n" % (i, "UNK", 999.00, 999.00)
+                line = "%4s %3s  %8.2f  %8.2f\n" % (i, "UNK", 999.00, 999.00)
                 ocslist_full_new.append(line)
             for i in range(start, stop):
                 line = "%s" % ocslist_full[i]
@@ -206,11 +182,11 @@ def check_seq(pdb_filename, cs_exp_name):
             for i in range(
                 lastocs, lastocs + indellast
             ):  # works only if indellast is positive
-                line = "%4s %3s  %6.2f  %6.2f\n" % (i, "UNK", 999.00, 999.00)
+                line = "%4s %3s  %8.2f  %8.2f\n" % (i, "UNK", 999.00, 999.00)
                 ocslist_full_new.append(line)
         # check if both sequences match
         fd = open(os.path.join("data", f"{cs_exp_name}.ocs"), "w")
-        for i in range(0, len(seqlist)):
+        for i in range(len(seqlist)):
             if (
                 seqlist[i] == ocslist_full_new[i].split()[1]
                 or ocslist_full_new[i].split()[1] == "UNK"
@@ -298,7 +274,6 @@ def align(three0_list, three1_list):
     return beginning, endding
 
 
-# from LoadDatabase import load # this solution is faster
 
 
 def load(path):
@@ -597,7 +572,7 @@ def CheShift(filename, ocs_file, Db, reference):
     for line in open(os.path.join("data", ocs_file)
     ).readlines():  # compute chemical shift only for residues with observed
         if line.split()[1] == "UNK":  # chemical shifts
-            a = ["UNK", np.nan, np.nan]
+            a = np.nan
             chemical_shifts.append(a)
             phi = get_phi(residueNumber)
             psi = get_psi(residueNumber)
@@ -693,9 +668,8 @@ def write_teo_cs(pdb_filename, bmrb_code):
     results = open(os.path.join("data", f"{fd[0][0].lower()}_cs_theo_exp.csv"), "w")
     for pair in fd:
         pdb_filename, cs_exp = pair
-        cs_exp_name = cs_exp.split(".")[0]
         conformations_num = split_pdb(pdb_filename)
-        reference = bmrb2cheshift(cs_exp, cs_exp_name)
+        reference = bmrb2cheshift(cs_exp)
         ok, pdb_list, ocslist_full_new = check_seq(pdb_filename, bmrb_code)
         if ok:
             rmsd(
