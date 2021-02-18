@@ -114,12 +114,16 @@ def plot_cs_differences(
     if not plot_kwargs:
         plot_kwargs = {}
     plot_kwargs.setdefault("s", 10)
+    plot_kwargs.setdefault("alpha", 1)
 
     dataframe_full = get_biomolecular_data(protein_code, bmrb_code=bmrb_code)
-    dataframe_reference, idata = hierarchical_reg_reference(target_df=dataframe_full)
-    idata_target = idata.sel(
-    cheshift_dim_0=slice(dataframe_reference.shape[0]-dataframe_full.shape[0], 
-        dataframe_reference.shape[0]))
+    if f'idata_{protein_code}.nc' in os.listdir('./data/'):
+        idata_target = az.from_netcdf(f'data/idata_{protein_code}.nc')
+    else:
+        dataframe_reference, idata = hierarchical_reg_reference(target_df=dataframe_full)
+        idata_target = idata.sel(
+        cheshift_dim_0=slice(dataframe_reference.shape[0]-dataframe_full.shape[0], 
+            dataframe_reference.shape[0]))
 
     idata_target.posterior_predictive = idata_target.posterior_predictive * std_exp + mean_exp
 
@@ -172,7 +176,7 @@ def plot_cs_differences(
                     marker=marker,
                     c=color[0],
                     linewidth=5,
-                    alpha=1,
+                    
                     **plot_kwargs,
                 )
 
